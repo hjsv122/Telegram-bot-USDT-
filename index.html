@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>لعبة القفز للاستثمار</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #00b09b, #96c93d);
+            text-align: center;
+            color: white;
+            margin: 0;
+            padding: 0;
+        }
+        h1 {
+            margin-top: 20px;
+        }
+        #gameCanvas {
+            background: #222;
+            display: block;
+            margin: 20px auto;
+            border-radius: 10px;
+        }
+        .stats {
+            margin: 15px;
+            font-size: 18px;
+        }
+        button {
+            padding: 10px 15px;
+            font-size: 16px;
+            margin: 5px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            background-color: #ff9800;
+            color: white;
+        }
+        button:hover {
+            background-color: #e68900;
+        }
+        .wallet-section {
+            margin-top: 20px;
+            background: rgba(255,255,255,0.1);
+            padding: 15px;
+            border-radius: 10px;
+        }
+        input {
+            padding: 8px;
+            border-radius: 5px;
+            border: none;
+            margin: 5px;
+            width: 250px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>🏆 لعبة القفز للاستثمار</h1>
+    <canvas id="gameCanvas" width="400" height="300"></canvas>
+
+    <div class="stats">
+        القفزات: <span id="jumps">0</span> | الأرباح: $<span id="earnings">0</span>
+    </div>
+
+    <button onclick="jump()">قفز!</button>
+    <button onclick="collectEarnings()">استلم الأرباح</button>
+
+    <div class="wallet-section">
+        <h3>💰 السحب</h3>
+        <input type="text" id="walletAddress" placeholder="أدخل عنوان المحفظة">
+        <button onclick="withdraw()">سحب الأرباح</button>
+    </div>
+
+    <script>
+        let jumps = 0;
+        let earnings = 0;
+        const jumpValue = 1; // 1 دولار لكل قفزة
+
+        function jump() {
+            jumps++;
+            earnings += jumpValue;
+            document.getElementById("jumps").innerText = jumps;
+            document.getElementById("earnings").innerText = earnings;
+        }
+
+        function collectEarnings() {
+            fetch('/collect', { method: 'POST' })
+            .then(res => res.json())
+            .then(data => {
+                alert("تم إضافة الأرباح للمحفظة الداخلية: $" + data.balance);
+            });
+        }
+
+        function withdraw() {
+            let address = document.getElementById("walletAddress").value.trim();
+            if (!address) {
+                alert("الرجاء إدخال عنوان المحفظة");
+                return;
+            }
+            fetch('/withdraw', { 
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ address })
+            })
+            .then(res => res.json())
+            .then(data => {
+                alert(data.message);
+            });
+        }
+    </script>
+
+</body>
+</html>
