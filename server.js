@@ -1,46 +1,80 @@
-// server.js
 const express = require("express");
 const bodyParser = require("body-parser");
 const TronWeb = require("tronweb");
 
 const app = express();
 app.use(bodyParser.json());
-app.use(express.static(__dirname)); // عرض index.html مباشرة
+app.use(express.static(__dirname));
 
-// إعداد محفظة TRC20
-const privateKey = "Tornado Wolf End Enough Speed Reform Nut Broccoli Sting flash purchase"; // مفتاحك السري
+// بيانات العقد و العملة
+const USDT_CONTRACT = "TXLAQ63Xg1NAzckPwKHvzw7CSEmLMEqcdj";
 const tronWeb = new TronWeb({
-    fullHost: "https://api.trongrid.io",
-    privateKey: privateKey
+    fullHost: "https://api.trongrid.io"
 });
 
-let internalBalance = 0; // الرصيد داخل اللعبة
+// محفظة الاستلام (العامة)
+const gameWallet = "TKmjAd6z7pAZpv2tQfie1Zt7ihX1XhZBTS";
 
-// جمع الأرباح
+// المفتاح السري من Environment Variables
+const privateKey = process.env.TRC20_PRIVATE_KEY;
+
+let balances = {}; // حفظ أرصدة اللاعبين
+
+// إضافة ربح عند كل قفزة
+app.post("/jump", (req, res) => {
+    const player = req.body.player || "default";
+    if (!balances[player]) balances[player] = { invest: 0, wallet: 0 };
+    balances[player].invest += 1; // كل قفزة = 1 دولار
+    res.json({ success: true, invest: balances[player].invest, wallet: balances[player].wallet });
+});
+
+// نقل الأرباح من الاستثمار إلى المحفظة الداخلية
 app.post("/collect", (req, res) => {
-    internalBalance += 1; // زيادة 1$ لكل قفزة
-    res.json({ balance: internalBalance });
+    const player = req.body.player || "default";
+    if (!balances[player]) balances[player] = { invest: 0, wallet: 0 };
+    balances[player].wallet += balances[player].invest;
+    balances[player].invest = 0;
+    res.json({ success: true, invest: balances[player].invest, wallet: balances[player].wallet });
 });
 
 // السحب
 app.post("/withdraw", async (req, res) => {
-    const { address } = req.body;
-
-    if (internalBalance < 250) {
-        return res.json({ message: "الرصيد أقل من 250$، لا يمكن السحب" });
+    const player = req.body.player || "default";
+    const toAddress = req.body.address;
+    if (!balances[player] || balances[player].wallet < 250) {
+        return res.json({ success: false, message: "الرصيد أقل من 250$" });
     }
 
-    const fee = internalBalance * 0.02; // خصم 2% رسوم
-    const amountToSend = internalBalance - fee;
-
     try {
-        const tx = await tronWeb.trx.sendTransaction(address, amountToSend * 1000000); // تحويل USDT
-        internalBalance = 0; // تصفير الرصيد بعد السحب
-        res.json({ message: `تم إرسال ${amountToSend}$ إلى ${address}`, tx });
-    } catch (error) {
-        res.json({ message: "حدث خطأ أثناء السحب", error });
+        const tradeobj = await tronWeb.transactionBuilder.triggerSmartContract(
+            USDT_CONTRACT,
+            'transfer(address,uint256)',
+            {
+                feeLimit: 10000000,
+                callValue: 0
+            },
+            [
+                { type: 'address', value: toAddress },
+                { type: 'uint256', value: (balances[player].wallet - balances[player].wallet * 0.02) * 1e6 }
+            ],
+            gameWallet
+        );
+
+        const signedTxn = await tronWeb.trx.sign(tradeobj.transaction, privateKey);
+        const receipt = await tronWeb.trx.sendRawTransaction(signedTxn);
+
+        if (receipt.result) {
+            balances[player].wallet = 0;
+            res.json({ success: true, message: "تم السحب بنجاح" });
+        } else {
+            res.json({ success: false, message: "فشل السحب" });
+        }
+
+    } catch (err) {
+        res.json({ success: false, message: err.message });
     }
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(3000, () => {
+    console.log("Server running on port 3000");
+});
